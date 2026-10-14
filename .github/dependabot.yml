@@ -18,3 +18,24 @@ updates:
       github-actions:
         patterns:
           - "*"
+
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "02:00"
+      timezone: "Europe/Vienna"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "python:uv"
+    assignees:
+      - "Marcel-TO"
+    groups:
+      uv:
+        patterns:
+          - "*"
