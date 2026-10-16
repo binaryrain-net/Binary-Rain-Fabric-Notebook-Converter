@@ -55,16 +55,25 @@ PERCENT_MARKER_RE = re.compile(r"^# %%(?:\s|$)")
 PERCENT_KEY_RE = re.compile(r"\s*([A-Za-z_][\w.-]*)=")
 
 LOCAL_DEV_TAG = "local-dev"
-LOCAL_DEV_CELL_SOURCE = """\
+LOCAL_DEV_CELL_HEADER = """\
 # LOCAL DEVELOPMENT ONLY. Do not change this cell.
 # It creates a local Spark session in place of the Fabric runtime.
 # `fabric-nb to-fabric` removes every cell tagged "local-dev", so it never reaches Fabric.
+import os
+
+from binaryrain_fabric_local_pyspark.display import display
 from binaryrain_fabric_local_pyspark.spark import get_local_spark
 from dotenv import load_dotenv
 
 load_dotenv()
-spark = get_local_spark()
 """
+LOCAL_DEV_CELL_FOOTER = "spark = get_local_spark()\n"
+WORKSPACE_ID_ENV = "FABRIC_WORKSPACE_ID"
+LAKEHOUSE_ID_ENV = "FABRIC_LAKEHOUSE_ID"
+LAKEHOUSE_META_KEYS: dict[str, str] = {
+    WORKSPACE_ID_ENV: "default_lakehouse_workspace_id",
+    LAKEHOUSE_ID_ENV: "default_lakehouse",
+}
 
 
 class FabricNotebookError(ValueError):
@@ -201,15 +210,47 @@ def _parse_code_cell(body: list[str], *, parameters: bool) -> dict[str, Any]:
     return cell
 
 
-def _local_dev_cell() -> dict[str, Any]:
+def _lakehouse_env(notebook_meta: dict[str, Any]) -> dict[str, str]:
+    """Read the default lakehouse and workspace IDs from Fabric notebook metadata.
+
+    :param dict[str, Any] notebook_meta: Fabric notebook level metadata.
+    :returns dict[str, str]: Environment variable names mapped to IDs. IDs missing
+        from the metadata are left out.
+    """
+    lakehouse = notebook_meta.get("dependencies", {}).get("lakehouse", {})
+    if not isinstance(lakehouse, dict):
+        return {}
+    return {
+        env: str(lakehouse[key]) for env, key in LAKEHOUSE_META_KEYS.items() if lakehouse.get(key)
+    }
+
+
+def _local_dev_cell_source(notebook_meta: dict[str, Any]) -> str:
+    """Build the source of the local development setup cell.
+
+    The lakehouse and workspace IDs are set after ``load_dotenv()`` so the values from
+    the notebook take precedence over ``.env``.
+
+    :param dict[str, Any] notebook_meta: Fabric notebook level metadata.
+    :returns str: Python source of the cell.
+    """
+    env_lines = "".join(
+        f"os.environ[{json.dumps(name)}] = {json.dumps(value)}\n"
+        for name, value in _lakehouse_env(notebook_meta).items()
+    )
+    return LOCAL_DEV_CELL_HEADER + env_lines + LOCAL_DEV_CELL_FOOTER
+
+
+def _local_dev_cell(notebook_meta: dict[str, Any]) -> dict[str, Any]:
     """Build the code cell that sets up a local Spark session for development.
 
+    :param dict[str, Any] notebook_meta: Fabric notebook level metadata.
     :returns dict[str, Any]: Jupyter code cell tagged with ``LOCAL_DEV_TAG``.
     """
     return {
         "cell_type": "code",
         "metadata": {"tags": [LOCAL_DEV_TAG]},
-        "source": LOCAL_DEV_CELL_SOURCE.splitlines(keepends=True),
+        "source": _local_dev_cell_source(notebook_meta).splitlines(keepends=True),
         "execution_count": None,
         "outputs": [],
     }
@@ -253,8 +294,9 @@ def fabric_to_ipynb(text: str) -> dict[str, Any]:
         else:
             cells.append(_parse_code_cell(body, parameters=marker == MARKER_PARAMETERS))
 
-    cells.insert(0, _local_dev_cell())
-    return _build_notebook(cells, notebook_meta or {})
+    notebook_meta = notebook_meta or {}
+    cells.insert(0, _local_dev_cell(notebook_meta))
+    return _build_notebook(cells, notebook_meta)
 
 
 def _build_notebook(cells: list[dict[str, Any]], notebook_meta: dict[str, Any]) -> dict[str, Any]:

@@ -46,7 +46,7 @@ uv run fabric-nb to-fabric nb_x.ipynb -o nb_x.Notebook
 
 ### Local dev cell
 
-`to-ipynb` and `to-repl` add a setup cell at the top of every output file. It loads `.env`, logs a reminder to set up the local dev environment and creates `spark` with `binaryrain_fabric_local_pyspark`. The cell carries the `local-dev` tag, and `to-fabric` drops every cell with that tag, so the setup code never reaches Fabric. Don't edit or untag this cell.
+`to-ipynb` and `to-repl` add a setup cell at the top of every output file. It loads `.env`, logs a reminder to set up the local dev environment and creates `spark` with `binaryrain_fabric_local_pyspark`. After loading `.env`, it sets `FABRIC_WORKSPACE_ID` and `FABRIC_LAKEHOUSE_ID` from the notebook's default lakehouse metadata (`default_lakehouse_workspace_id` and `default_lakehouse`), so these values win over `.env`. A line is left out when the notebook has no such value. The cell carries the `local-dev` tag, and `to-fabric` drops every cell with that tag, so the setup code never reaches Fabric. Don't edit or untag this cell.
 
 Before running a converted notebook, install `binaryrain-fabric-local-pyspark` and `python-dotenv` in your local environment and create a `.env` file. `fabric-nb setup` does both.
 
