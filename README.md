@@ -59,15 +59,18 @@ uv run fabric-nb setup
 `setup` asks these questions:
 
 1. Where the local Fabric setup should take place. Defaults to the working directory.
-2. Whether to use `uv` or `python`. Defaults to `uv` when it is installed.
-3. The SQL Analytics Endpoint of Fabric.
-4. The name of the default Fabric Lakehouse.
+2. The name of the local environment. Defaults to the setup folder name. It is used as the uv project name and as the Jupyter kernel name.
+3. Whether to use `uv` or `python`. Defaults to `uv` when it is installed.
+4. The SQL Analytics Endpoint of Fabric.
+5. The name of the default Fabric Lakehouse.
 
-It then writes `requirements.txt` with `python-dotenv` and `binaryrain-fabric-local-pyspark`, and `.env` with `FABRIC_SERVER` and `FABRIC_DATABASE` set from your answers. Existing entries in both files are kept, and existing `FABRIC_SERVER` and `FABRIC_DATABASE` values are replaced.
+It then writes `requirements.txt` with `python-dotenv` and `binaryrain-fabric-local-pyspark`, `requirements-dev.txt` with `ipykernel`, and `.env` with `FABRIC_SERVER` and `FABRIC_DATABASE` set from your answers. Existing entries in these files are kept, and existing `FABRIC_SERVER` and `FABRIC_DATABASE` values are replaced.
 
 It also writes `.gitignore` with `.cache/`, `.venv/`, `__pycache__/` and `.env`, keeping existing entries.
 
-With `uv` it runs `uv init` (skipped when a `pyproject.toml` exists) and `uv add -r requirements.txt`. With `python` it creates a `.venv` virtual environment and runs `pip install -r requirements.txt` in it.
+With `uv` it runs `uv init --name <name>` (skipped when a `pyproject.toml` exists), `uv add -r requirements.txt` and `uv add --dev -r requirements-dev.txt`. With `python` it creates a `.venv` virtual environment and runs `pip install -r requirements.txt` and `pip install -r requirements-dev.txt` in it.
+
+It then registers the `.venv` as a Jupyter kernel for your user under the environment name. With `uv` this is `uv run python -m ipykernel install --user --env VIRTUAL_ENV <setup folder>\.venv --name=<name>`. With `python` the same command runs with the Python of the `.venv`. The module form is used because Windows can block the `ipython.exe` launcher with "Access is denied". Any active `VIRTUAL_ENV` is removed before the setup commands run, so the converter's own environment does not leak into the target.
 
 Then it runs `az login`, so the [Azure CLI](https://aka.ms/azure-cli) must be installed.
 
