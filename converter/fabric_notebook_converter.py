@@ -63,6 +63,7 @@ import os
 
 from binaryrain_fabric_local_pyspark.display import display
 from binaryrain_fabric_local_pyspark.spark import get_local_spark
+from binaryrain_fabric_local_pyspark import notebookutils
 from dotenv import load_dotenv
 
 load_dotenv()
