@@ -4,15 +4,17 @@ Convert Microsoft Fabric notebooks (`.Notebook` folders with a `notebook-content
 
 ## Install
 
+Requires Python 3.13 or newer and [uv](https://docs.astral.sh/uv/). Run from the repository root:
+
 ```bash
 uv sync
 ```
 
-This installs the `fabric-nb` command into the project environment. Run it with `uv run fabric-nb`, `python -m converter` or `python main.py`.
+This installs the `fabric-nb` command into the project environment. Run it with `uv run fabric-nb`, `python -m converter.cli` or `python main.py`.
 
 ### just recipes
 
-With [just](https://github.com/casey/just) installed, `just` lists the recipes:
+With [just](https://github.com/casey/just) installed, `just --list` lists the recipes. Running `just` without a recipe runs `install`.
 
 | Recipe                      | Runs                                                           |
 | --------------------------- | -------------------------------------------------------------- |
@@ -42,13 +44,17 @@ uv run fabric-nb to-fabric nb_x.ipynb repl/nb_y.py
 uv run fabric-nb to-fabric nb_x.ipynb -o nb_x.Notebook
 ```
 
-`to-fabric` reads the file suffix to pick the format. REPL scripts use the `# %%` percent format, which VS Code and Jupytext run cell by cell.
+`to-fabric` reads the file suffix to pick the format. Its `-o/--output` option accepts either a `.Notebook` folder or a `.py` content file. REPL scripts use the `# %%` percent format understood by VS Code and Jupytext.
 
 ### Local dev cell
 
-`to-ipynb` and `to-repl` add a setup cell at the top of every output file. It loads `.env`, logs a reminder to set up the local dev environment and creates `spark` with `binaryrain_fabric_local_pyspark`. After loading `.env`, it sets `FABRIC_WORKSPACE_ID` and `FABRIC_LAKEHOUSE_ID` from the notebook's default lakehouse metadata (`default_lakehouse_workspace_id` and `default_lakehouse`), so these values win over `.env`. A line is left out when the notebook has no such value. The cell carries the `local-dev` tag, and `to-fabric` drops every cell with that tag, so the setup code never reaches Fabric. Don't edit or untag this cell.
+`to-ipynb` and `to-repl` add a setup cell at the top of every output file. It imports the local `display` and `notebookutils` helpers from `binaryrain_fabric_local_pyspark`, loads `.env` and creates `spark` with `get_local_spark()`.
 
-Before running a converted notebook, install `binaryrain-fabric-local-pyspark` and `python-dotenv` in your local environment and create a `.env` file. `fabric-nb setup` does both.
+After loading `.env`, the cell sets `FABRIC_WORKSPACE_ID` and `FABRIC_LAKEHOUSE_ID` from the notebook's default lakehouse metadata under `dependencies.lakehouse`. It uses `default_lakehouse_workspace_id` and `default_lakehouse`, respectively. These values override `.env`. An assignment is left out when the notebook has no such value.
+
+The cell carries the `local-dev` tag, and `to-fabric` drops every cell with that tag, so the setup code never reaches Fabric. Don't edit or untag this cell.
+
+Before running a converted notebook, install `binaryrain-fabric-local-pyspark` and `python-dotenv` in your local environment and create a `.env` file. `fabric-nb setup` does both. The CLI prints a setup reminder after a successful conversion to either local format.
 
 ### Local setup
 
@@ -59,18 +65,22 @@ uv run fabric-nb setup
 `setup` asks these questions:
 
 1. Where the local Fabric setup should take place. Defaults to the working directory.
-2. The name of the local environment. Defaults to the setup folder name. It is used as the uv project name and as the Jupyter kernel name.
+2. The name of the local environment. Defaults to a name derived from the setup folder, with invalid characters replaced or removed. It is used as the name of a new uv project and as the Jupyter kernel name.
 3. Whether to use `uv` or `python`. Defaults to `uv` when it is installed.
 4. The SQL Analytics Endpoint of Fabric.
 5. The name of the default Fabric Lakehouse.
 
-It then writes `requirements.txt` with `python-dotenv` and `binaryrain-fabric-local-pyspark`, `requirements-dev.txt` with `ipykernel`, and `.env` with `FABRIC_SERVER` and `FABRIC_DATABASE` set from your answers. Existing entries in these files are kept, and existing `FABRIC_SERVER` and `FABRIC_DATABASE` values are replaced.
+It then writes `requirements.txt` with `python-dotenv` and `binaryrain-fabric-local-pyspark`, and `requirements-dev.txt` with `ipykernel`. Existing requirements entries are kept.
+
+It writes `FABRIC_SERVER` and `FABRIC_DEFAULT_DATABASE` to `.env` from your answers. It replaces existing values for these keys and keeps other entries.
 
 It also writes `.gitignore` with `.cache/`, `.venv/`, `__pycache__/` and `.env`, keeping existing entries.
 
-With `uv` it runs `uv init --name <name>` (skipped when a `pyproject.toml` exists), `uv add -r requirements.txt` and `uv add --dev -r requirements-dev.txt`. With `python` it creates a `.venv` virtual environment and runs `pip install -r requirements.txt` and `pip install -r requirements-dev.txt` in it.
+With `uv` it runs `uv init --name <name>`, skipping this step when a `pyproject.toml` exists. It then runs `uv add -r requirements.txt` and `uv add --dev -r requirements-dev.txt`. With `python` it creates or reuses a `.venv` virtual environment and runs `pip install -r requirements.txt` and `pip install -r requirements-dev.txt` in it.
 
 It then registers the `.venv` as a Jupyter kernel for your user under the environment name. With `uv` this is `uv run python -m ipykernel install --user --env VIRTUAL_ENV <setup folder>\.venv --name=<name>`. With `python` the same command runs with the Python of the `.venv`. The module form is used because Windows can block the `ipython.exe` launcher with "Access is denied". Any active `VIRTUAL_ENV` is removed before the setup commands run, so the converter's own environment does not leak into the target.
+
+Select the registered kernel in Jupyter or VS Code when running a converted notebook.
 
 Then it runs `az login`, so the [Azure CLI](https://aka.ms/azure-cli) must be installed.
 
@@ -109,11 +119,15 @@ Absolute paths are used as given. The settings live in `config.toml` in the root
 workdir = "C:\\projects\\fabric"
 ```
 
-A relative `workdir` is resolved against the repository root. `config.toml` is git ignored because it holds machine specific paths. Set `FABRIC_NB_CONFIG` to use another file.
+`config.toml` is git ignored because it holds machine-specific paths. Set `FABRIC_NB_CONFIG` to use another file. A relative `workdir` stored in the file is resolved against that file's directory, which is the repository root by default.
+
+Relative values for `-w/--workdir` and `FABRIC_NB_WORKDIR`, and paths passed to `config set workdir`, are resolved against the current folder. The selected working directory must exist.
 
 ### Output files
 
-The converter keeps the newline style of an existing target file. When `to-fabric` writes a `.Notebook` folder without a `.platform` file, it prints a warning, because Fabric git sync needs that file.
+Existing output files are overwritten without confirmation, and missing parent folders are created. The converter keeps the newline style of an existing target file. New files use LF line endings.
+
+When `to-fabric` writes a `.Notebook` folder without a `.platform` file, it prints a warning, because Fabric git sync needs that file. The converter does not create `.platform` files.
 
 The command exits with code 1 if any source fails and prints the error for each failed source.
 

@@ -5,8 +5,8 @@ install:
     uv sync
 
 # Interactively set up a local Fabric development environment
-setup *args:
-    uv run fabric-nb setup {{ args }}
+setup:
+    uv run fabric-nb setup
 
 # Convert Fabric notebooks to Jupyter notebooks
 to-ipynb +args:

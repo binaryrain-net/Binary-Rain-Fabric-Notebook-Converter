@@ -1,6 +1,6 @@
 [project]
 name = "binary-rain-fabric-notebook-converter"
-version = "0.1.0"
+version = "1.0.0"
 description = "Convert Microsoft Fabric notebooks to Jupyter notebooks or REPL scripts and back"
 readme = "README.md"
 requires-python = ">=3.13"
